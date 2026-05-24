@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const jobsController = require('../controllers/jobsController');
-
 router.get('/jobs', jobsController.getJobs);
 router.get('/jobs/search', jobsController.searchJobs);
 router.get('/stats', jobsController.getStats);

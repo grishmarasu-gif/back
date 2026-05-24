@@ -68,6 +68,15 @@ const jobSchema = new mongoose.Schema({
 // Create a compound index to ensure title + company uniqueness
 jobSchema.index({ title: 1, company: 1 }, { unique: true });
 
-const Job = mongoose.model('Job', jobSchema);
+// Create a unique sparse index for apply_link to prevent duplicate URLs
+jobSchema.index({ apply_link: 1 }, { unique: true, sparse: true });
+
+// Performance indexes
+jobSchema.index({ created_at: -1 });
+jobSchema.index({ location: 1 });
+jobSchema.index({ source: 1 });
+jobSchema.index({ job_type: 1 });
+
+const Job = mongoose.model('Job', jobSchema, 'jobs');
 
 module.exports = Job;

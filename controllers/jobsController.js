@@ -1,5 +1,6 @@
 const Job = require('../models/Job');
 const apifyService = require('../services/apifyService');
+const mongoose = require('mongoose');
 
 // Mock user skills for calculating match score
 const USER_SKILLS = ['React', 'Node.js', 'JavaScript'];
@@ -57,9 +58,11 @@ const formatJobResponse = (job) => {
 
 exports.getJobs = async (req, res) => {
     try {
-        const { search, location, job_type, employment_type, sort, refresh, page = 1, limit = 20 } = req.query;
+        console.time('API: getJobs');
+        const { search, location, workType, jobType, level, roles, sort, page = 1, limit = 50 } = req.query;
         
-        let query = {};
+        let query = {}; 
+
         if (search) {
             query.$or = [
                 { title: { $regex: search, $options: 'i' } },
@@ -72,73 +75,62 @@ exports.getJobs = async (req, res) => {
             query.location = { $regex: location, $options: 'i' };
         }
         
-        if (job_type && job_type.toLowerCase() !== 'all') {
-            query.job_type = job_type.toLowerCase();
+        if (workType && workType !== 'All') {
+            query.job_type = { $regex: workType, $options: 'i' };
         }
 
-        if (employment_type && employment_type.toLowerCase() !== 'all') {
-            query.employmentType = { $regex: employment_type, $options: 'i' };
+        if (jobType && jobType !== 'All') {
+            query.employmentType = { $regex: jobType, $options: 'i' };
         }
 
-        const skip = (parseInt(page) - 1) * parseInt(limit);
+        if (level && level !== 'All') {
+            query.experienceLevel = { $regex: level, $options: 'i' };
+        }
 
-        // Check DB first
-        let jobs = await Job.find(query)
-            .sort(sort === 'match' ? {} : { created_at: -1 })
-            .skip(skip)
-            .limit(parseInt(limit))
-            .lean();
-
-        // If no jobs found and it's the first page, or refresh requested, fetch from Apify
-        if ((jobs.length === 0 && page == 1) || refresh === 'true') {
-            console.log('No jobs in DB or refresh requested. Fetching from Apify...');
-            const apifyJobs = await apifyService.fetchJobs(search || 'Software Engineer', location || 'United States');
-            
-            // Upsert into DB
-            for (const aj of apifyJobs) {
-                await Job.updateOne(
-                    { title: aj.title, company: aj.company },
-                    { 
-                        $setOnInsert: {
-                            title: aj.title,
-                            company: aj.company,
-                            location: aj.location,
-                            salary: aj.salary,
-                            job_type: aj.workType.toLowerCase(),
-                            skills_required: aj.skills,
-                            description: aj.description,
-                            apply_link: aj.applyUrl,
-                            source: aj.source,
-                            companyLogo: aj.companyLogo,
-                            employmentType: aj.employmentType,
-                            experienceLevel: aj.experienceLevel,
-                            deadline: aj.deadline,
-                            responsibilities: aj.responsibilities,
-                            companyOverview: aj.companyOverview,
-                            preferredSkills: aj.preferredSkills,
-                            created_at: new Date(aj.postedAt)
-                        }
-                    },
-                    { upsert: true }
-                );
+        if (roles) {
+            const roleList = roles.split(',').filter(r => r.trim());
+            if (roleList.length > 0) {
+                const roleRegexes = roleList.map(r => new RegExp(r.split(' ')[0], 'i'));
+                if (query.$or) {
+                    query.$and = [{ $or: query.$or }, { title: { $in: roleRegexes } }];
+                    delete query.$or;
+                } else {
+                    query.title = { $in: roleRegexes };
+                }
             }
-            
-            // Re-fetch from DB to get IDs and include user status
-            jobs = await Job.find(query)
-                .sort({ created_at: -1 })
-                .skip(skip)
-                .limit(parseInt(limit))
-                .lean();
         }
+
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+
+        console.time('DB: countDocuments');
+        const totalJobsInDB = await Job.countDocuments(query);
+        console.timeEnd('DB: countDocuments');
+
+        let jobsQuery = Job.find(query).sort(sort === 'match' ? {} : { created_at: -1 });
+        jobsQuery = jobsQuery.skip((pageNum - 1) * limitNum).limit(limitNum);
+
+        console.time('DB: findJobs');
+        let jobs = await jobsQuery.lean();
+        console.timeEnd('DB: findJobs');
 
         const formattedJobs = jobs.map(formatJobResponse);
 
-        // Sorting
         if (sort === 'match') {
             formattedJobs.sort((a, b) => b.matchScore - a.matchScore);
         }
 
-        res.json(formattedJobs);
+        const totalPages = Math.ceil(totalJobsInDB / limitNum);
+
+        console.log(`[Backend API] getJobs -> Returning ${formattedJobs.length} jobs (Page ${pageNum}/${totalPages}). Total DB matching: ${totalJobsInDB}`);
+        console.timeEnd('API: getJobs');
+
+        res.status(200).json({ 
+            jobs: formattedJobs, 
+            totalJobs: totalJobsInDB, 
+            currentPage: pageNum,
+            totalPages: totalPages
+        });
     } catch (error) {
         console.error('Error in getJobs:', error);
         res.status(500).json({ message: 'Server Error' });
@@ -148,6 +140,10 @@ exports.getJobs = async (req, res) => {
 exports.getJobById = async (req, res) => {
     try {
         const { id } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(404).json({ message: 'Job not found' });
+        }
+        
         const job = await Job.findById(id).lean();
         if (!job) return res.status(404).json({ message: 'Job not found' });
         
@@ -216,7 +212,7 @@ exports.getMyJobs = async (req, res) => {
         }).sort({ created_at: -1 }).lean();
         
         const formattedJobs = jobs.map(formatJobResponse);
-        res.json(formattedJobs);
+        res.status(200).json({ jobs: formattedJobs });
     } catch (error) {
         console.error('Error in getMyJobs:', error);
         res.status(500).json({ message: 'Server Error' });
