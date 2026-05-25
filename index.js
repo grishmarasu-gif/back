@@ -12,15 +12,31 @@ const resumeRoutes = require('./routes/resumeRoutes');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
-app.use(cors({
-  origin: [
-    "https://app-5odi-a562xqsg6-apply4works.vercel.app/",
-    "http://localhost:5173"
-  ],
+const allowedOrigins = [
+  'https://app-5odi.vercel.app',
+  'https://app-5odi-a562xqsg6-apply4works.vercel.app',
+  'http://localhost:5173'
+];
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL.replace(/\/$/, ''));
+}
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-}));
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
+};
+
+// Middleware
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Handle preflight OPTIONS requests explicitly
 app.use(express.json());
 app.use('/uploads', require('express').static(require('path').join(__dirname, 'uploads')));
 
