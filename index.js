@@ -14,8 +14,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const allowedOrigins = [
-   'https://apply4works.com/',
-   'https://www.apply4works.com/',
+   'https://apply4works.com',
+   'https://www.apply4works.com',
   'http://localhost:5173'
 ];
 if (process.env.FRONTEND_URL) {
