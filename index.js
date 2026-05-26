@@ -14,8 +14,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const allowedOrigins = [
-  'https://app-5odi.vercel.app',
-  'https://app-5odi-a562xqsg6-apply4works.vercel.app',
+   'https://apply4works.com/',
   'http://localhost:5173'
 ];
 if (process.env.FRONTEND_URL) {
