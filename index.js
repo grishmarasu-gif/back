@@ -18,9 +18,9 @@ const allowedOrigins = [
    'https://www.apply4works.com',
   'http://localhost:5173'
 ];
-if (process.env.FRONTEND_URL) {
-  allowedOrigins.push(process.env.FRONTEND_URL.replace(/\/$/, ''));
-}
+// if (process.env.FRONTEND_URL) {
+//   allowedOrigins.push(process.env.FRONTEND_URL.replace(/\/$/, ''));
+// }
 
 const corsOptions = {
   origin: function (origin, callback) {
