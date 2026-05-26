@@ -43,17 +43,35 @@ const KNOWN_TOOLS = [
   'selenium', 'cypress', 'jest', 'mocha', 'pytest',
 ];
 
-const SECTION_HEADERS = {
-  summary:         /\b(summary|profile|about me|objective)\b/i,
-  experience:      /\b(experience|work history|employment|professional background)\b/i,
-  projects:        /\b(projects|personal projects|academic projects)\b/i,
-  education:       /\b(education|academic|qualification|degree|courses)\b/i,
-  skills:          /\b(skills|technical skills|competencies|expertise)\b/i,
-  tools:           /\b(tools|technologies|stack)\b/i,
-  certifications:  /\b(certif|credential|license|award|course)\b/i,
-  achievements:    /\b(achievements|awards|honors)\b/i,
-  links:           /\b(links|profiles|socials|websites)\b/i,
+const SECTION_KEYWORDS = {
+  summary:         ['summary', 'profile', 'about me', 'objective', 'professional summary'],
+  experience:      ['experience', 'work history', 'employment', 'professional background', 'work experience'],
+  projects:        ['projects', 'personal projects', 'academic projects', 'key projects'],
+  education:       ['education', 'academic', 'qualification', 'degree', 'academic background'],
+  skills:          ['skills', 'technical skills', 'competencies', 'expertise', 'core competencies'],
+  tools:           ['tools', 'technologies', 'stack', 'software'],
+  certifications:  ['certifications', 'credentials', 'licenses', 'certificates', 'courses'],
+  achievements:    ['achievements', 'awards', 'honors', 'accomplishments'],
+  languages:       ['languages'],
+  publications:    ['publications', 'papers', 'journals'],
+  extracurricular: ['extracurricular', 'activities', 'leadership', 'volunteering', 'volunteer'],
+  interests:       ['interests', 'hobbies'],
+  references:      ['references', 'referrals']
 };
+
+function identifyHeader(line) {
+  if (line.length > 45) return null;
+  const cleanLine = line.toLowerCase().replace(/[^a-z\s]/g, '').trim();
+  const wordCount = cleanLine.split(' ').length;
+  if (!cleanLine || wordCount > 4) return null;
+  
+  for (const [section, keywords] of Object.entries(SECTION_KEYWORDS)) {
+    if (keywords.some(kw => cleanLine === kw || (cleanLine.includes(kw) && wordCount <= 3))) {
+      return section;
+    }
+  }
+  return null;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -122,7 +140,7 @@ function extractYearsExperience(text) {
   return 0;
 }
 
-function extractSection(text, headerRegex) {
+function extractSection(text, targetSection) {
   const lines = text.split('\n');
   const results = [];
   let inside = false;
@@ -130,20 +148,24 @@ function extractSection(text, headerRegex) {
     const clean = line.trim();
     if (!clean) continue;
 
-    if (headerRegex.test(clean)) { inside = true; continue; }
+    const detectedHeader = identifyHeader(clean);
+    if (detectedHeader === targetSection) { 
+      inside = true; 
+      continue; 
+    } else if (detectedHeader && inside) {
+      inside = false; 
+      break; // Prevent section leakage
+    }
 
-    if (inside) {
-      // Stop at next major section header
-      const isOtherHeader = Object.values(SECTION_HEADERS).some(r => r !== headerRegex && r.test(clean));
-      if (isOtherHeader && clean.length < 50) { inside = false; continue; }
-      if (clean.length > 5) results.push(clean);
+    if (inside && clean.length > 3) {
+      results.push(clean);
     }
   }
-  return results.slice(0, 40); // Allow up to 40 lines per section
+  return results.slice(0, 50);
 }
 
 function extractStructuredExperience(text) {
-  const lines = extractSection(text, SECTION_HEADERS.experience);
+  const lines = extractSection(text, 'experience');
   if (lines.length === 0) return [];
   
   const expList = [];
@@ -181,27 +203,73 @@ function extractStructuredExperience(text) {
 }
 
 function extractStructuredProjects(text) {
-  const lines = extractSection(text, SECTION_HEADERS.projects);
+  const lines = extractSection(text, 'projects');
   if (lines.length === 0) return [];
   
   const projList = [];
   let currentProj = null;
   
-  for (const line of lines) {
-    if ((line.length < 60 && !line.startsWith('•') && !line.startsWith('-')) || projList.length === 0) {
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i].trim();
+    if (!line) continue;
+
+    const isBullet = /^[-•*]/.test(line);
+    const hasDate = /(?:20\d{2}|19\d{2})\s*[-|–|to]+\s*(?:20\d{2}|present|current)|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d{4}/i.test(line);
+    const hasTools = /^(Tools|Technologies|Tech Stack|Built with|Stack):/i.test(line);
+
+    let isNewProject = false;
+    if (!currentProj) {
+      if (!isBullet && !hasTools) isNewProject = true;
+    } else if (!isBullet && !hasTools && line.length < 100) {
+      let nextLineIsSupporting = false;
+      if (hasDate) {
+         isNewProject = true;
+      } else {
+        // Peek ahead to see if the next line confirms this is a project title
+        for (let j = 1; j <= 2 && i + j < lines.length; j++) {
+           const nextLine = lines[i+j].trim();
+           if (!nextLine) continue;
+           if (/(?:20\d{2}|19\d{2})|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d{4}/i.test(nextLine) || 
+               /^(Tools|Technologies|Tech Stack|Built with|Stack):/i.test(nextLine) || 
+               /^[-•*]/.test(nextLine)) {
+             nextLineIsSupporting = true;
+           }
+           break;
+        }
+        if (nextLineIsSupporting) {
+          isNewProject = true;
+        }
+      }
+    }
+
+    if (isNewProject) {
       if (currentProj && currentProj.title) {
         projList.push(currentProj);
       }
-      currentProj = { title: line, techStack: '', description: '' };
+      currentProj = { title: line, techStack: '', duration: '', description: '' };
       
-      // Try to extract tech stack if it's in parentheses or separated by pipes
-      const tsMatch = line.match(/\((.*?)\)|\|(.*)/);
-      if (tsMatch) {
-        currentProj.techStack = (tsMatch[1] || tsMatch[2] || '').trim();
-        currentProj.title = line.replace(tsMatch[0], '').trim();
+      // Check for duration on the title line
+      const dateMatch = currentProj.title.match(/(?:20\d{2}|19\d{2})\s*[-|–|to]+\s*(?:20\d{2}|present|current)|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d{4}.*/i);
+      if (dateMatch) {
+        currentProj.duration = dateMatch[0].trim();
+        currentProj.title = currentProj.title.replace(dateMatch[0], '').replace(/^[|-]+|[|-]+$/g, '').trim();
       }
+
+      // Try to extract tech stack from title line
+      const tsMatch = currentProj.title.match(/\((.*?)\)|\|(.*)/);
+      if (tsMatch && !currentProj.techStack) {
+        currentProj.techStack = (tsMatch[1] || tsMatch[2] || '').trim();
+        currentProj.title = currentProj.title.replace(tsMatch[0], '').trim();
+      }
+      
+    } else if (hasTools && currentProj) {
+      currentProj.techStack = line.replace(/^(Tools|Technologies|Tech Stack|Built with|Stack):\s*/i, '').trim();
+    } else if (hasDate && currentProj && !currentProj.duration && !isBullet) {
+      currentProj.duration = line.trim();
     } else {
-      currentProj.description += (currentProj.description ? '\n' : '') + line;
+      if (currentProj) {
+        currentProj.description += (currentProj.description ? '\n' : '') + line;
+      }
     }
   }
   if (currentProj && currentProj.title) {
@@ -211,9 +279,71 @@ function extractStructuredProjects(text) {
   return projList;
 }
 
+function extractStructuredEducation(text) {
+  const lines = extractSection(text, 'education');
+  if (lines.length === 0) return [];
+  
+  const eduList = [];
+  let currentEdu = null;
+  
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i].trim();
+    if (!line) continue;
+    
+    const hasDate = /(20\d{2}|19\d{2})\s*[-|–|to]+\s*(20\d{2}|present|current)/i.test(line);
+    const isInst = /university|college|institute|school|academy|technology/i.test(line);
+    const isDegree = /b\.tech|bachelor|master|b\.sc|m\.sc|phd|diploma|degree/i.test(line);
+
+    if (isInst || (hasDate && !isDegree) || eduList.length === 0 || !currentEdu) {
+      if (currentEdu && currentEdu.institution) {
+        eduList.push(currentEdu);
+      }
+      currentEdu = { institution: line, degree: '', duration: '', cgpa: '' };
+      
+      const dateMatch = line.match(/(?:20\d{2}|19\d{2})\s*[-|–|to]+\s*(?:20\d{2}|present|current)|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d{4}.*/i);
+      if (dateMatch) {
+        currentEdu.duration = dateMatch[0].trim();
+        currentEdu.institution = line.replace(dateMatch[0], '').replace(/^[|-]+|[|-]+$/g, '').replace(/,/g, '').trim();
+      }
+    } else {
+      if (/CGPA|GPA|Percentage/i.test(line)) {
+        const cgpaMatch = line.match(/[\d.]+/);
+        if (cgpaMatch) currentEdu.cgpa = cgpaMatch[0];
+        else currentEdu.cgpa = line.replace(/CGPA|GPA|Percentage|:|Score/gi, '').trim();
+      } else if (!currentEdu.degree && line.length < 80) {
+        currentEdu.degree = line;
+        const dateMatch = line.match(/(?:20\d{2}|19\d{2})\s*[-|–|to]+\s*(?:20\d{2}|present|current)|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d{4}.*/i);
+        if (dateMatch && !currentEdu.duration) {
+          currentEdu.duration = dateMatch[0].trim();
+          currentEdu.degree = line.replace(dateMatch[0], '').replace(/^[|-]+|[|-]+$/g, '').replace(/,/g, '').trim();
+        }
+      }
+    }
+  }
+  if (currentEdu && currentEdu.institution) {
+    eduList.push(currentEdu);
+  }
+  return eduList;
+}
+
 function extractSkillsFromText(text) {
   const lower = text.toLowerCase();
-  return [...new Set(KNOWN_SKILLS.filter(skill => lower.includes(skill)))];
+  const matchedKnown = KNOWN_SKILLS.filter(skill => lower.includes(skill));
+  
+  // Parse literal text under the Skills section
+  const skillsLines = extractSection(text, 'skills');
+  const rawSkills = [];
+  skillsLines.forEach(line => {
+    line.split(/[,•|\-|:;]/).forEach(part => {
+      const p = part.trim();
+      // Heuristic: valid skill strings are usually short and don't contain too many spaces
+      if (p.length > 1 && p.length < 35 && p.split(' ').length <= 4) {
+        rawSkills.push(p.toLowerCase());
+      }
+    });
+  });
+
+  return [...new Set([...matchedKnown, ...rawSkills])];
 }
 
 function extractToolsFromText(text) {
@@ -252,10 +382,12 @@ function parseResume(rawText) {
   const technologies  = skills;
   const experience    = extractStructuredExperience(text);
   const projects      = extractStructuredProjects(text);
-  const education     = extractSection(text, SECTION_HEADERS.education);
-  const certifications = extractSection(text, SECTION_HEADERS.certifications);
-  const achievements  = extractSection(text, SECTION_HEADERS.achievements);
-  const summaryBlock  = extractSection(text, SECTION_HEADERS.summary).join(' ');
+  const education     = extractStructuredEducation(text);
+  const certifications = extractSection(text, 'certifications');
+  const achievements  = extractSection(text, 'achievements');
+  const summaryBlock  = extractSection(text, 'summary').join(' ');
+  const languages     = extractSection(text, 'languages');
+  const publications  = extractSection(text, 'publications');
   const yearsOfExperience = extractYearsExperience(text);
   const preferredRoles = suggestRoles(text);
   const experienceLevel = guessExperienceLevel(yearsOfExperience);
@@ -278,6 +410,8 @@ function parseResume(rawText) {
     education,
     certifications,
     achievements,
+    languages,
+    publications,
     preferredRoles,
     yearsOfExperience,
     experienceLevel,

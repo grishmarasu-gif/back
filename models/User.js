@@ -35,6 +35,56 @@ const userSchema = new mongoose.Schema({
   onboardingCompleted: {
     type: Boolean,
     default: false
+  },
+  plan: {
+    type: String,
+    enum: ['Free', 'Basic', 'Pro', 'Pro Plus'],
+    default: 'Free'
+  },
+  paymentStatus: {
+    type: String,
+    enum: ['Pending', 'Completed', 'Failed'],
+    default: 'Pending'
+  },
+  razorpayOrderId: {
+    type: String,
+    default: null
+  },
+  razorpayPaymentId: {
+    type: String,
+    default: null
+  },
+  subscriptionStart: {
+    type: Date,
+    default: null
+  },
+  subscriptionEnd: {
+    type: Date,
+    default: null
+  },
+  appliedCoupon: {
+    type: String,
+    default: null
+  },
+  originalAmount: {
+    type: Number,
+    default: null
+  },
+  discountPercentage: {
+    type: Number,
+    default: null
+  },
+  discountAmount: {
+    type: Number,
+    default: null
+  },
+  finalAmountPaid: {
+    type: Number,
+    default: null
+  },
+  currency: {
+    type: String,
+    default: 'USD'
   }
 }, { timestamps: true });
 

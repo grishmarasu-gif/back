@@ -47,6 +47,8 @@ const registerUser = async (req, res) => {
           email: user.email,
           pricingCompleted: user.pricingCompleted,
           onboardingCompleted: user.onboardingCompleted,
+          plan: user.plan,
+          paymentStatus: user.paymentStatus
         }
       });
     } else {
@@ -79,6 +81,8 @@ const loginUser = async (req, res) => {
           preferences: user.preferences,
           pricingCompleted: user.pricingCompleted,
           onboardingCompleted: user.onboardingCompleted,
+          plan: user.plan,
+          paymentStatus: user.paymentStatus
         }
       });
     } else {

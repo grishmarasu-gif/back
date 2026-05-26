@@ -30,4 +30,12 @@ const protect = async (req, res, next) => {
   }
 };
 
-module.exports = { protect };
+const protectPremium = async (req, res, next) => {
+  if (req.user && req.user.plan !== 'Free' && req.user.plan !== 'Basic') {
+    next();
+  } else {
+    res.status(403).json({ success: false, message: 'Not authorized for premium features. Please upgrade your plan.' });
+  }
+};
+
+module.exports = { protect, protectPremium };

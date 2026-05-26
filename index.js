@@ -8,6 +8,7 @@ const { fetchJobs } = require('./services/jobFetcher');
 const authRoutes   = require('./routes/authRoutes');
 const userRoutes   = require('./routes/userRoutes');
 const resumeRoutes = require('./routes/resumeRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -45,6 +46,7 @@ app.use('/api', jobRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/resume', resumeRoutes);
+app.use('/api/payment', paymentRoutes);
 
 
 // Connect to DB and Start Server

@@ -56,8 +56,37 @@ async function uploadResume(req, res) {
     // ── Parse structured fields ───────────────────────────────────────────────
     const parsed = parseResume(rawText);
 
-    // ── Upsert Resume document (one per user) ─────────────────────────────────
+    // ── Upsert & Merge Resume document (one per user) ─────────────────────────
     const userId = req.user._id;
+    let existingResume = await Resume.findOne({ user: userId });
+    
+    let finalParsed = parsed;
+    if (existingResume && existingResume.parsed) {
+      const old = existingResume.parsed;
+      
+      // Helper to merge arrays and deduplicate based on a key (like company/title)
+      const mergeDedupe = (arr1, arr2, keyFn) => {
+        const map = new Map();
+        [...(arr2 || []), ...(arr1 || [])].forEach(item => { // new items (arr1) overwrite old (arr2)
+          if (!item) return;
+          const k = typeof item === 'string' ? item.toLowerCase() : keyFn(item);
+          if (k) map.set(k, item);
+        });
+        return Array.from(map.values());
+      };
+
+      finalParsed = {
+        ...old, // keep old bases
+        ...parsed, // new scalar values (name, email, summary, etc.) overwrite old
+        experience: mergeDedupe(parsed.experience, old.experience, e => `${e.company}-${e.title}`.toLowerCase()),
+        projects: mergeDedupe(parsed.projects, old.projects, p => (p.title || '').toLowerCase()),
+        skills: [...new Set([...(old.skills || []), ...(parsed.skills || [])])],
+        tools: [...new Set([...(old.tools || []), ...(parsed.tools || [])])],
+        education: parsed.education?.length ? parsed.education : old.education,
+        certifications: parsed.certifications?.length ? parsed.certifications : old.certifications,
+      };
+    }
+
     const resume = await Resume.findOneAndUpdate(
       { user: userId },
       {
@@ -66,7 +95,7 @@ async function uploadResume(req, res) {
         fileType: ext.replace('.', ''),
         filePath,
         rawText,
-        parsed,
+        parsed: finalParsed,
       },
       { new: true, upsert: true, setDefaultsOnInsert: true }
     );
