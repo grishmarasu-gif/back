@@ -14,39 +14,32 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const allowedOrigins = [
-   'https://apply4works.com',
-   'https://www.apply4works.com',
-  'http://localhost:5173'
+  "https://apply4works.com",
+  "https://www.apply4works.com",
+  "http://localhost:5173"
 ];
-// if (process.env.FRONTEND_URL) {
-//   allowedOrigins.push(process.env.FRONTEND_URL.replace(/\/$/, ''));
-// }
 
-const corsOptions = {
-  origin: function (origin, callback) {
-    console.log("Incoming Origin:", origin);
+// Temporary debug middleware
+app.use((req,res,next)=>{
+  console.log("Origin:", req.headers.origin);
+  next();
+});
+
+app.use(cors({
+  origin: function(origin, callback) {
+    console.log("Origin:", origin);
+
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      console.log("Blocked by CORS:", origin);
-      callback(new Error('Not allowed by CORS'));
+      callback(new Error("Not allowed by CORS"));
     }
   },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
-};
+  credentials: true
+}));
 
-// Middleware
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Handle preflight OPTIONS requests explicitly
+app.options("*", cors());
 app.use(express.json());
-
-// Global Request Logger
-app.use((req, res, next) => {
-  console.log(`[${req.method}] ${req.originalUrl} - Origin: ${req.headers.origin || 'No Origin'}`);
-  next();
-});
 
 app.use('/uploads', require('express').static(require('path').join(__dirname, 'uploads')));
 
