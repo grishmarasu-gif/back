@@ -24,9 +24,11 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: function (origin, callback) {
+    console.log("Incoming Origin:", origin);
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.log("Blocked by CORS:", origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -39,6 +41,13 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions)); // Handle preflight OPTIONS requests explicitly
 app.use(express.json());
+
+// Global Request Logger
+app.use((req, res, next) => {
+  console.log(`[${req.method}] ${req.originalUrl} - Origin: ${req.headers.origin || 'No Origin'}`);
+  next();
+});
+
 app.use('/uploads', require('express').static(require('path').join(__dirname, 'uploads')));
 
 // Routes
