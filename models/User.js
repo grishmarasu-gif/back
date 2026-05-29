@@ -41,6 +41,35 @@ const userSchema = new mongoose.Schema({
     enum: ['Free', 'Basic', 'Pro', 'Pro Plus'],
     default: 'Free'
   },
+  planType: {
+    type: String,
+    enum: ['BASIC', 'PRO'],
+    default: 'BASIC'
+  },
+  securityQuestionsCompleted: {
+    type: Boolean,
+    default: false
+  },
+  securityAnswers: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
+  },
+  canApplyJobs: {
+    type: Boolean,
+    default: true
+  },
+  securityReviewRequired: {
+    type: Boolean,
+    default: false
+  },
+  preferredCountry: {
+    type: String,
+    default: ''
+  },
+  autoApplyEnabled: {
+    type: Boolean,
+    default: false
+  },
   paymentStatus: {
     type: String,
     enum: ['Pending', 'Completed', 'Failed'],

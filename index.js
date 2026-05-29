@@ -9,6 +9,7 @@ const authRoutes   = require('./routes/authRoutes');
 const userRoutes   = require('./routes/userRoutes');
 const resumeRoutes = require('./routes/resumeRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
+const feedbackRoutes = require('./routes/feedbackRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -19,16 +20,13 @@ const allowedOrigins = [
   "http://localhost:5173"
 ];
 
-// Temporary debug middleware
-app.use((req,res,next)=>{
-  console.log("Origin:", req.headers.origin);
+app.use((req, res, next) => {
+  // console.log('[Backend] Request:', req.method, req.url); // reduced noise
   next();
 });
 
 app.use(cors({
   origin: function(origin, callback) {
-    console.log("Origin:", origin);
-
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -49,11 +47,12 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/resume', resumeRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 
 // Connect to DB and Start Server
 connectDB().then(async () => {
-  app.listen(PORT, async () => {
+  const server = app.listen(PORT, async () => {
     console.log(`Server running on port ${PORT}`);
     
     const Job = require('./models/Job');
@@ -77,6 +76,15 @@ connectDB().then(async () => {
     
     const nextSync = new Date(Date.now() + 4 * 60 * 60 * 1000);
     console.log(`Next scheduled background sync time: ~${nextSync.toLocaleString()}`);
+  });
+
+  server.on("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      console.log(`Port ${PORT} already in use`);
+      process.exit(1);
+    } else {
+      console.error(err);
+    }
   });
 }).catch(err => {
   console.error('Failed to connect to MongoDB', err);

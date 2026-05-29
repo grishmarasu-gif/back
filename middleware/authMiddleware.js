@@ -38,4 +38,25 @@ const protectPremium = async (req, res, next) => {
   }
 };
 
-module.exports = { protect, protectPremium };
+const hasProAccess = async (req, res, next) => {
+  if (req.user && (req.user.planType === 'PRO' || req.user.plan === 'Pro' || req.user.plan === 'Pro Plus')) {
+    next();
+  } else {
+    res.status(403).json({ success: false, message: 'Available in Pro Plan. Please upgrade.' });
+  }
+};
+
+const optionalAuth = async (req, res, next) => {
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    try {
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
+      req.user = await User.findById(decoded.id).select('-password');
+    } catch (error) {
+      console.error('Optional Auth Error:', error.message);
+    }
+  }
+  next();
+};
+
+module.exports = { protect, protectPremium, hasProAccess, optionalAuth };
