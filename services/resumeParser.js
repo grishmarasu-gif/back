@@ -43,6 +43,18 @@ const KNOWN_TOOLS = [
   'selenium', 'cypress', 'jest', 'mocha', 'pytest',
 ];
 
+const KNOWN_FRAMEWORKS = [
+  'react', 'angular', 'vue', 'svelte', 'nextjs', 'nuxtjs', 'gatsby', 'node.js', 'express', 'django', 'flask',
+  'fastapi', 'spring', 'laravel', 'rails', 'tailwindcss', 'bootstrap', 'material ui',
+  'tensorflow', 'pytorch', 'scikit-learn', 'keras', 'pandas', 'numpy', 'flutter', 'react native'
+];
+
+const KNOWN_SOFT_SKILLS = [
+  'leadership', 'communication', 'teamwork', 'problem solving', 'critical thinking', 'time management',
+  'adaptability', 'agile', 'scrum', 'collaboration', 'project management', 'analytical', 'mentoring',
+  'presentation', 'public speaking', 'decision making'
+];
+
 const SECTION_KEYWORDS = {
   summary:         ['summary', 'profile', 'about me', 'objective', 'professional summary'],
   experience:      ['experience', 'work history', 'employment', 'professional background', 'work experience'],
@@ -56,7 +68,9 @@ const SECTION_KEYWORDS = {
   publications:    ['publications', 'papers', 'journals'],
   extracurricular: ['extracurricular', 'activities', 'leadership', 'volunteering', 'volunteer'],
   interests:       ['interests', 'hobbies'],
-  references:      ['references', 'referrals']
+  references:      ['references', 'referrals'],
+  volunteer:       ['volunteer', 'volunteering', 'community service'],
+  additional:      ['additional information', 'other information', 'additional details']
 };
 
 function identifyHeader(line) {
@@ -78,6 +92,12 @@ function identifyHeader(line) {
 function extractEmail(text) {
   const m = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
   return m ? m[0] : '';
+}
+
+function extractLocation(text) {
+  // A simple regex to look for City, State combinations (e.g., San Francisco, CA or New York, NY) or just a standard zip code line
+  const m = text.match(/([A-Z][a-zA-Z\s]+,\s*[A-Z]{2}(?:\s+\d{5})?)/);
+  return m ? m[0].trim() : '';
 }
 
 function extractPhone(text) {
@@ -164,8 +184,8 @@ function extractSection(text, targetSection) {
   return results.slice(0, 50);
 }
 
-function extractStructuredExperience(text) {
-  const lines = extractSection(text, 'experience');
+function extractStructuredExperience(text, targetSection = 'experience') {
+  const lines = extractSection(text, targetSection);
   if (lines.length === 0) return [];
   
   const expList = [];
@@ -191,6 +211,9 @@ function extractStructuredExperience(text) {
       if (!currentExp.title && line.length < 50 && !line.startsWith('•') && !line.startsWith('-')) {
         currentExp.title = line;
       } else {
+        if (/\d+%|\$\d+|\b(increased|decreased|achieved|spearheaded|improved|reduced|grew)\b/i.test(line)) {
+           currentExp.achievements = (currentExp.achievements ? currentExp.achievements + '\n' : '') + line;
+        }
         currentExp.responsibilities += (currentExp.responsibilities ? '\n' : '') + line;
       }
     }
@@ -246,7 +269,7 @@ function extractStructuredProjects(text) {
       if (currentProj && currentProj.title) {
         projList.push(currentProj);
       }
-      currentProj = { title: line, techStack: '', duration: '', description: '' };
+      currentProj = { title: line, techStack: '', duration: '', description: '', impact: '' };
       
       // Check for duration on the title line
       const dateMatch = currentProj.title.match(/(?:20\d{2}|19\d{2})\s*[-|–|to]+\s*(?:20\d{2}|present|current)|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d{4}.*/i);
@@ -268,6 +291,9 @@ function extractStructuredProjects(text) {
       currentProj.duration = line.trim();
     } else {
       if (currentProj) {
+        if (/\d+%|\$\d+|\b(increased|decreased|achieved|spearheaded|improved|reduced|grew)\b/i.test(line)) {
+           currentProj.impact = (currentProj.impact ? currentProj.impact + '\n' : '') + line;
+        }
         currentProj.description += (currentProj.description ? '\n' : '') + line;
       }
     }
@@ -289,8 +315,57 @@ function extractStructuredEducation(text) {
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i].trim();
     if (!line) continue;
+
+    // Skip literal headers if they get picked up
+    if (line.includes('Degree/Certificate') || line.includes('CGPA/Percentage')) {
+        continue;
+    }
     
-    const hasDate = /(20\d{2}|19\d{2})\s*[-|–|to]+\s*(20\d{2}|present|current)/i.test(line);
+    // First, format the line to add spaces between squished lowercase and uppercase / letters and numbers
+    let formattedLine = line.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/([a-zA-Z])([0-9])/g, '$1 $2');
+    
+    // Check for mashed rows
+    const mashedMatch = formattedLine.match(/^(.*?)(National Institute|Indian Institute|Sri Chaitanya|University|College|Institute|School|Academy|Board|NIT|IIT)(.*?)([\d]{1,2}\.[\d]{1,2}|[\d]{2,3}%?)\s*((?:(?:19|20)\d{2}\s*[-|–|to]+\s*(?:19|20)\d{2})|(?:19|20)\d{2})/i);
+    if (mashedMatch) {
+      if (currentEdu && currentEdu.institution) {
+        eduList.push(currentEdu);
+      }
+      
+      let degree = mashedMatch[1].trim();
+      let institution = mashedMatch[2].trim() + mashedMatch[3].trim();
+      let cgpa = mashedMatch[4].trim();
+      let duration = mashedMatch[5].trim();
+      
+      // Fix for when non-degree words get caught in the degree prefix (like "Secondary Blooms High")
+      const degreeKeywords = "^(10th|12th|Class 10|Class 12|Matriculation|Senior Secondary|Intermediate|Secondary|Higher Secondary|SSC|HSC|B\\.?Tech|M\\.?Tech|B\\.?E|M\\.?E|B\\.?Sc|M\\.?Sc|Diploma|BCA|MCA|BBA|MBA|B\\.?A|M\\.?A|B\\.?Com|M\\.?Com|Ph\\.?D)\\b";
+      const dMatch = degree.match(new RegExp(`(${degreeKeywords})(.*)`, 'i'));
+      
+      if (dMatch) {
+          let kw = dMatch[1].trim();
+          let leftover = dMatch[2].trim();
+          
+          // Only move the leftover part to institution if it looks like the start of a school name
+          // (i.e. it doesn't start with punctuation, 'in', or contain engineering/science/arts terms)
+          if (leftover && !/^[,.\-|]/.test(leftover) && !/^in\b/i.test(leftover) && !/engineering|science|arts|technology|computer/i.test(leftover)) {
+              degree = kw;
+              institution = leftover + " " + institution;
+          }
+      }
+
+      currentEdu = { 
+        institution: institution, 
+        degree: degree, 
+        cgpa: cgpa, 
+        duration: duration,
+        board_or_university: '',
+        specialization: ''
+      };
+      eduList.push(currentEdu);
+      currentEdu = null;
+      continue;
+    }
+    
+    const hasDate = /(?:19|20)\d{2}\s*[-|–|to]+\s*(?:20\d{2}|present|current)/i.test(line) || /\b(?:19|20)\d{2}\b/.test(line);
     const isInst = /university|college|institute|school|academy|technology/i.test(line);
     const isDegree = /b\.tech|bachelor|master|b\.sc|m\.sc|phd|diploma|degree/i.test(line);
 
@@ -298,21 +373,21 @@ function extractStructuredEducation(text) {
       if (currentEdu && currentEdu.institution) {
         eduList.push(currentEdu);
       }
-      currentEdu = { institution: line, degree: '', duration: '', cgpa: '' };
+      currentEdu = { institution: line, degree: '', duration: '', cgpa: '', board_or_university: '', specialization: '' };
       
-      const dateMatch = line.match(/(?:20\d{2}|19\d{2})\s*[-|–|to]+\s*(?:20\d{2}|present|current)|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d{4}.*/i);
+      const dateMatch = line.match(/(?:19|20)\d{2}\s*[-|–|to]+\s*(?:20\d{2}|present|current)|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d{4}.*|\b(?:19|20)\d{2}\b/i);
       if (dateMatch) {
         currentEdu.duration = dateMatch[0].trim();
         currentEdu.institution = line.replace(dateMatch[0], '').replace(/^[|-]+|[|-]+$/g, '').replace(/,/g, '').trim();
       }
     } else {
-      if (/CGPA|GPA|Percentage/i.test(line)) {
+      if (/CGPA|GPA|Percentage/i.test(line) || /^[\d]{1,2}\.[\d]{1,2}$/.test(line) || /^[\d]{2,3}%?$/.test(line)) {
         const cgpaMatch = line.match(/[\d.]+/);
         if (cgpaMatch) currentEdu.cgpa = cgpaMatch[0];
         else currentEdu.cgpa = line.replace(/CGPA|GPA|Percentage|:|Score/gi, '').trim();
       } else if (!currentEdu.degree && line.length < 80) {
         currentEdu.degree = line;
-        const dateMatch = line.match(/(?:20\d{2}|19\d{2})\s*[-|–|to]+\s*(?:20\d{2}|present|current)|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d{4}.*/i);
+        const dateMatch = line.match(/(?:19|20)\d{2}\s*[-|–|to]+\s*(?:20\d{2}|present|current)|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d{4}.*|\b(?:19|20)\d{2}\b/i);
         if (dateMatch && !currentEdu.duration) {
           currentEdu.duration = dateMatch[0].trim();
           currentEdu.degree = line.replace(dateMatch[0], '').replace(/^[|-]+|[|-]+$/g, '').replace(/,/g, '').trim();
@@ -351,6 +426,16 @@ function extractToolsFromText(text) {
   return [...new Set(KNOWN_TOOLS.filter(tool => lower.includes(tool)))];
 }
 
+function extractFrameworksFromText(text) {
+  const lower = text.toLowerCase();
+  return [...new Set(KNOWN_FRAMEWORKS.filter(fw => lower.includes(fw)))];
+}
+
+function extractSoftSkillsFromText(text) {
+  const lower = text.toLowerCase();
+  return [...new Set(KNOWN_SOFT_SKILLS.filter(skill => lower.includes(skill)))];
+}
+
 function suggestRoles(text) {
   const lower = text.toLowerCase();
   const suggestions = [];
@@ -379,12 +464,16 @@ function parseResume(rawText) {
 
   const skills        = extractSkillsFromText(text);
   const tools         = extractToolsFromText(text);
+  const frameworks    = extractFrameworksFromText(text);
+  const softSkills    = extractSoftSkillsFromText(text);
   const technologies  = skills;
-  const experience    = extractStructuredExperience(text);
+  const experience    = extractStructuredExperience(text, 'experience');
+  const volunteerExperience = extractStructuredExperience(text, 'volunteer');
   const projects      = extractStructuredProjects(text);
   const education     = extractStructuredEducation(text);
   const certifications = extractSection(text, 'certifications');
   const achievements  = extractSection(text, 'achievements');
+  const additionalInformation = extractSection(text, 'additional');
   const summaryBlock  = extractSection(text, 'summary').join(' ');
   const languages     = extractSection(text, 'languages');
   const publications  = extractSection(text, 'publications');
@@ -396,6 +485,7 @@ function parseResume(rawText) {
     fullName:        extractName(text),
     email:           extractEmail(text),
     phone:           extractPhone(text),
+    location:        extractLocation(text),
     linkedin:        extractLinkedIn(text),
     github:          extractGitHub(text),
     leetcode:        extractLeetCode(text),
@@ -404,13 +494,17 @@ function parseResume(rawText) {
     summary:         summaryBlock,
     skills,
     tools,
+    frameworks,
+    softSkills,
     technologies,
     experience,
+    volunteerExperience,
     projects,
     education,
     certifications,
     achievements,
     languages,
+    additionalInformation,
     publications,
     preferredRoles,
     yearsOfExperience,

@@ -3,7 +3,7 @@ const multer   = require('multer');
 const path     = require('path');
 const fs       = require('fs');
 const { protect } = require('../middleware/authMiddleware');
-const { uploadResume, getMyResume } = require('../controllers/resumeController');
+const { uploadResume, getMyResume, enhanceUserResume } = require('../controllers/resumeController');
 
 const router = express.Router();
 
@@ -35,5 +35,6 @@ const upload = multer({
 // ── Routes ─────────────────────────────────────────────────────────────────────
 router.post('/upload', protect, upload.single('resume'), uploadResume);
 router.get('/me',      protect, getMyResume);
+router.post('/enhance', protect, enhanceUserResume);
 
 module.exports = router;

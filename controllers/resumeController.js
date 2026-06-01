@@ -56,36 +56,16 @@ async function uploadResume(req, res) {
     // ── Parse structured fields ───────────────────────────────────────────────
     const parsed = parseResume(rawText);
 
-    // ── Upsert & Merge Resume document (one per user) ─────────────────────────
+    // ── Upsert & Replace Resume document (one per user) ───────────────────────
     const userId = req.user._id;
-    let existingResume = await Resume.findOne({ user: userId });
     
+    // Strict replacement: new upload completely replaces old data to prevent mixed sample data
     let finalParsed = parsed;
-    if (existingResume && existingResume.parsed) {
-      const old = existingResume.parsed;
-      
-      // Helper to merge arrays and deduplicate based on a key (like company/title)
-      const mergeDedupe = (arr1, arr2, keyFn) => {
-        const map = new Map();
-        [...(arr2 || []), ...(arr1 || [])].forEach(item => { // new items (arr1) overwrite old (arr2)
-          if (!item) return;
-          const k = typeof item === 'string' ? item.toLowerCase() : keyFn(item);
-          if (k) map.set(k, item);
-        });
-        return Array.from(map.values());
-      };
 
-      finalParsed = {
-        ...old, // keep old bases
-        ...parsed, // new scalar values (name, email, summary, etc.) overwrite old
-        experience: mergeDedupe(parsed.experience, old.experience, e => `${e.company}-${e.title}`.toLowerCase()),
-        projects: mergeDedupe(parsed.projects, old.projects, p => (p.title || '').toLowerCase()),
-        skills: [...new Set([...(old.skills || []), ...(parsed.skills || [])])],
-        tools: [...new Set([...(old.tools || []), ...(parsed.tools || [])])],
-        education: parsed.education?.length ? parsed.education : old.education,
-        certifications: parsed.certifications?.length ? parsed.certifications : old.certifications,
-      };
-    }
+    console.log('[DEBUG UPLOAD] Uploaded Resume ID (New File):', originalname);
+    console.log('[DEBUG UPLOAD] Parsed Projects Count:', finalParsed.projects?.length || 0);
+    console.log('[DEBUG UPLOAD] Parsed Experience Count:', finalParsed.experience?.length || 0);
+    console.log('[DEBUG UPLOAD] Clearing old state and saving strictly new parsed data.');
 
     const resume = await Resume.findOneAndUpdate(
       { user: userId },
@@ -134,4 +114,35 @@ async function getMyResume(req, res) {
   }
 }
 
-module.exports = { uploadResume, getMyResume };
+// ── POST /api/resume/enhance ───────────────────────────────────────────────────
+const { tailorResume } = require('../services/atsEngine');
+
+async function enhanceUserResume(req, res) {
+  try {
+    const { resume, job } = req.body;
+    if (!resume || !job) {
+      return res.status(400).json({ success: false, message: 'Resume and job data are required.' });
+    }
+
+    console.log('[DEBUG ENHANCE] Tailoring Resume with Local ATS Engine:', {
+      sourceOfProjects: resume.projects?.length ? 'Uploaded/User' : 'Empty',
+      sourceOfExperience: resume.experience?.length ? 'Uploaded/User' : 'Empty',
+      uploadedResumeId: resume.id || 'unknown',
+      parsedResumeId: resume.id || 'unknown',
+      projectCount: resume.projects?.length || 0,
+      experienceCount: resume.experience?.length || 0,
+      targetJobTitle: job.title || 'unknown'
+    });
+
+    const enhanced = await tailorResume(resume, job);
+    
+    // We do NOT save this tailored version to the database to preserve the original parsed data.
+    // The tailored data is returned directly to the frontend builder.
+    return res.json({ success: true, enhanced });
+  } catch (err) {
+    console.error('Tailor resume error:', err);
+    return res.status(500).json({ success: false, message: 'Server error during ATS tailoring.' });
+  }
+}
+
+module.exports = { uploadResume, getMyResume, enhanceUserResume };
