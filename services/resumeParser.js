@@ -120,7 +120,7 @@ function extractName(text) {
 }
 
 function extractLinkedIn(text) {
-  const m = text.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[A-Za-z0-9_-]+/i);
+  const m = text.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/(?:in|profile)\/[A-Za-z0-9_-]+/i);
   return m ? m[0] : '';
 }
 
@@ -205,7 +205,14 @@ function extractStructuredExperience(text, targetSection = 'experience') {
       if (dateMatch) {
         currentExp.duration = dateMatch[0].trim();
         let stripped = line.replace(dateMatch[0], '').replace(/^[|-]+|[|-]+$/g, '').trim();
-        currentExp.company = stripped || 'Unknown Company';
+        
+        const splitMatch = stripped.match(/(.*?)\s*[-|]\s*(.*)/);
+        if (splitMatch) {
+            currentExp.title = splitMatch[1].trim();
+            currentExp.company = splitMatch[2].trim();
+        } else {
+            currentExp.company = stripped || 'Unknown Company';
+        }
       }
     } else {
       if (!currentExp.title && line.length < 50 && !line.startsWith('•') && !line.startsWith('-')) {
@@ -295,6 +302,15 @@ function extractStructuredProjects(text) {
            currentProj.impact = (currentProj.impact ? currentProj.impact + '\n' : '') + line;
         }
         currentProj.description += (currentProj.description ? '\n' : '') + line;
+        
+        // Implicit tools extraction
+        [...KNOWN_TOOLS, ...KNOWN_FRAMEWORKS].forEach(tool => {
+            const regex = new RegExp(`(^|[^a-z0-9])${tool.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`, 'i');
+            if (regex.test(line)) {
+                if (!currentProj.techStack) currentProj.techStack = tool;
+                else if (!currentProj.techStack.toLowerCase().includes(tool)) currentProj.techStack += `, ${tool}`;
+            }
+        });
       }
     }
   }

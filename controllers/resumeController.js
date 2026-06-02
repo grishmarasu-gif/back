@@ -119,7 +119,7 @@ const { tailorResume } = require('../services/atsEngine');
 
 async function enhanceUserResume(req, res) {
   try {
-    const { resume, job } = req.body;
+    const { resume, job, keywordsToInclude = [] } = req.body;
     if (!resume || !job) {
       return res.status(400).json({ success: false, message: 'Resume and job data are required.' });
     }
@@ -131,10 +131,11 @@ async function enhanceUserResume(req, res) {
       parsedResumeId: resume.id || 'unknown',
       projectCount: resume.projects?.length || 0,
       experienceCount: resume.experience?.length || 0,
-      targetJobTitle: job.title || 'unknown'
+      targetJobTitle: job.title || 'unknown',
+      keywordsToInclude
     });
 
-    const enhanced = await tailorResume(resume, job);
+    const enhanced = await tailorResume(resume, job, keywordsToInclude);
     
     // We do NOT save this tailored version to the database to preserve the original parsed data.
     // The tailored data is returned directly to the frontend builder.
