@@ -24,7 +24,15 @@ const TECH_DICTIONARY = [
 // Helper to extract keywords from text
 const getKeywords = (text) => {
     if (!text) return [];
-    return text.toLowerCase().replace(/[^a-z0-9\s-+#.]/g, ' ').split(/\s+/).filter(w => w.length > 1);
+    return text.toLowerCase().replace(/[^a-z0-9\s-+#.]/g, ' ').split(/\s+/).filter(w => w.length > 1 && !isNoise(w));
+};
+
+const NOISE_WORDS = ['opening', 'sayomg', 'hello', 'heyyy', 'list title', 'test', 'spam', 'placeholder', 'dummy', 'lorem', 'ipsum'];
+const isNoise = (word) => {
+    if (!word) return true;
+    const w = word.toLowerCase().trim();
+    if (w.length < 2 || w.length > 30) return true;
+    return NOISE_WORDS.some(noise => w === noise || w.includes(noise));
 };
 
 // Helper to score text based on how many job skills it contains
@@ -125,9 +133,9 @@ const extractJobSkills = (job) => {
         }
     }
 
-    mustHave = [...new Set(mustHave.filter(s => s && s.length > 1).map(s => s.toLowerCase()))];
-    important = [...new Set(important.filter(s => s && s.length > 1).map(s => s.toLowerCase()))];
-    niceToHave = [...new Set(niceToHave.filter(s => s && s.length > 1).map(s => s.toLowerCase()))];
+    mustHave = [...new Set(mustHave.filter(s => s && !isNoise(s)).map(s => s.toLowerCase()))];
+    important = [...new Set(important.filter(s => s && !isNoise(s)).map(s => s.toLowerCase()))];
+    niceToHave = [...new Set(niceToHave.filter(s => s && !isNoise(s)).map(s => s.toLowerCase()))];
     
     important = important.filter(s => !mustHave.includes(s));
     niceToHave = niceToHave.filter(s => !mustHave.includes(s) && !important.includes(s));
@@ -291,22 +299,32 @@ exports.tailorResume = async (resume, job, keywordsToInclude = []) => {
         if (skillsToInject.length > 0 && Array.isArray(tailored.experience) && tailored.experience.length > 0) {
             // Inject half into experience, half into projects
             const expToInject = skillsToInject.slice(0, Math.ceil(skillsToInject.length / 2));
-            if (expToInject.length > 0) {
-                const actionVerbs = ['Engineered', 'Architected', 'Spearheaded', 'Developed', 'Implemented'];
-                const verb = actionVerbs[Math.floor(Math.random() * actionVerbs.length)];
-                const expAdd = `• ${verb} scalable solutions utilizing ${expToInject.join(', ')} to meet critical business requirements and improve system performance by 30%.\n`;
-                const currentResp = tailored.experience[0].responsibilities || '';
+            const currentResp = tailored.experience[0].responsibilities || '';
+            const hasExpTemplate = currentResp.includes('Spearheaded the design') || currentResp.includes('Engineered scalable') || currentResp.includes('Architected and integrated');
+            
+            if (expToInject.length > 0 && !hasExpTemplate) {
+                const templates = [
+                    `• Spearheaded the design and deployment of robust features utilizing ${expToInject.join(', ')}, accelerating delivery timelines by 25% and enhancing system reliability.\n`,
+                    `• Engineered scalable, high-performance solutions leveraging ${expToInject.join(', ')} to address core business needs, resulting in a 30% optimization in processing speed.\n`,
+                    `• Architected and integrated strategic initiatives utilizing ${expToInject.join(', ')} across cross-functional teams, significantly improving operational efficiency.\n`
+                ];
+                const expAdd = templates[Math.floor(Math.random() * templates.length)];
                 tailored.experience[0].responsibilities = expAdd + currentResp;
             }
         }
 
         if (skillsToInject.length > 1 && Array.isArray(tailored.projects) && tailored.projects.length > 0) {
             const projToInject = skillsToInject.slice(Math.ceil(skillsToInject.length / 2));
-            if (projToInject.length > 0) {
-                const actionVerbs = ['Integrated', 'Leveraged', 'Utilized', 'Spearheaded'];
-                const verb = actionVerbs[Math.floor(Math.random() * actionVerbs.length)];
-                const projAdd = `• ${verb} ${projToInject.join(', ')} within the core architecture to drive efficiency and optimize data flow, achieving a 20% reduction in latency.\n`;
-                const currentDesc = tailored.projects[0].description || '';
+            const currentDesc = tailored.projects[0].description || '';
+            const hasProjTemplate = currentDesc.includes('Innovated and successfully') || currentDesc.includes('Directed the end-to-end') || currentDesc.includes('Championed the adoption');
+
+            if (projToInject.length > 0 && !hasProjTemplate) {
+                const templates = [
+                    `• Innovated and successfully launched key technical components using ${projToInject.join(', ')}, which successfully reduced latency and drove a 20% increase in user engagement.\n`,
+                    `• Directed the end-to-end integration of ${projToInject.join(', ')} within the core architecture, establishing a resilient and scalable data pipeline.\n`,
+                    `• Championed the adoption of ${projToInject.join(', ')} for modernizing legacy systems, achieving substantial improvements in maintainability and performance.\n`
+                ];
+                const projAdd = templates[Math.floor(Math.random() * templates.length)];
                 tailored.projects[0].description = projAdd + currentDesc;
             }
         }
@@ -317,15 +335,21 @@ exports.tailorResume = async (resume, job, keywordsToInclude = []) => {
     // Categorize the newly injected and sorted skills
     tailored.groupedSkills = categorizeSkills(tailored.skills);
 
-    // Dynamic Summary Generation
+    // Dynamic Summary Generation (prevent repetition by checking existing summary)
     const topSkills = (Array.isArray(tailored.skills) ? tailored.skills : []).slice(0, 5).join(', ');
     const jobTitleStr = job.title ? job.title.trim() : 'the role';
     const templates = [
-        `Results-driven ${jobTitleStr} with expertise in ${topSkills}. Proven track record of delivering high-quality solutions and achieving impactful outcomes. Highly motivated to apply technical acumen to drive success and scalability.`,
-        `Innovative ${jobTitleStr} offering a strong foundation in ${topSkills}. Adept at solving complex challenges and collaborating with cross-functional teams to exceed project requirements.`,
-        `Accomplished professional specializing in ${topSkills}. Passionate about leveraging technology to build robust systems and drive continuous improvement as a ${jobTitleStr}.`
+        `Highly accomplished and results-driven ${jobTitleStr} with proven expertise in ${topSkills}. Demonstrated track record of delivering innovative solutions, accelerating performance, and driving scalable growth. Adept at aligning technical strategy with critical business objectives.`,
+        `Forward-thinking ${jobTitleStr} offering a robust foundation in ${topSkills}. Recognized for architecting efficient systems, solving complex challenges, and leading cross-functional teams to exceed high-stakes project requirements on time and under budget.`,
+        `Strategic and adaptable professional specializing in ${topSkills}. Passionate about leveraging cutting-edge technology to build resilient systems, streamline operations, and deliver exceptional value as a ${jobTitleStr}.`
     ];
-    tailored.summary = templates[Math.floor(Math.random() * templates.length)];
+    
+    // Only replace summary if it's empty or already matches one of our templates
+    const currentSummary = tailored.summary || '';
+    const isGeneratedSummary = templates.some(t => currentSummary.substring(0, 15) === t.substring(0, 15));
+    if (!currentSummary || isGeneratedSummary) {
+        tailored.summary = templates[Math.floor(Math.random() * templates.length)];
+    }
 
     // 8. Strict compliance: Return empty array for missing sections
     if (!Array.isArray(tailored.projects) || tailored.projects.length === 0) tailored.projects = [];

@@ -3,7 +3,14 @@ const mongoose = require('mongoose');
 const userSchema = new mongoose.Schema({
   name: { 
     type: String, 
-    required: [true, 'Name is required'],
+    trim: true
+  },
+  firstName: {
+    type: String,
+    trim: true
+  },
+  lastName: {
+    type: String,
     trim: true
   },
   email: { 
@@ -116,5 +123,16 @@ const userSchema = new mongoose.Schema({
     default: 'USD'
   }
 }, { timestamps: true });
+
+userSchema.pre('save', function(next) {
+  if (this.firstName && this.lastName && !this.name) {
+    this.name = `${this.firstName} ${this.lastName}`;
+  } else if (this.name && (!this.firstName || !this.lastName)) {
+    const parts = this.name.split(' ');
+    this.firstName = parts[0] || '';
+    this.lastName = parts.slice(1).join(' ') || '';
+  }
+  next();
+});
 
 module.exports = mongoose.model('User', userSchema);

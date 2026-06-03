@@ -14,9 +14,9 @@ const generateToken = (id) => {
 // @access  Public
 const registerUser = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, firstName, lastName, email, password } = req.body;
 
-    if (!name || !email || !password) {
+    if ((!name && (!firstName || !lastName)) || !email || !password) {
       return res.status(400).json({ success: false, message: 'Please add all fields' });
     }
 
@@ -32,7 +32,9 @@ const registerUser = async (req, res) => {
 
     // Create user
     const user = await User.create({
-      name,
+      name: name || `${firstName} ${lastName}`,
+      firstName,
+      lastName,
       email,
       password: hashedPassword,
     });
@@ -44,6 +46,8 @@ const registerUser = async (req, res) => {
         user: {
           _id: user._id,
           name: user.name,
+          firstName: user.firstName,
+          lastName: user.lastName,
           email: user.email,
           pricingCompleted: user.pricingCompleted,
           onboardingCompleted: user.onboardingCompleted,
@@ -77,6 +81,8 @@ const loginUser = async (req, res) => {
         user: {
           _id: user._id,
           name: user.name,
+          firstName: user.firstName,
+          lastName: user.lastName,
           email: user.email,
           preferences: user.preferences,
           pricingCompleted: user.pricingCompleted,

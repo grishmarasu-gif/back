@@ -181,7 +181,7 @@ function extractSection(text, targetSection) {
       results.push(clean);
     }
   }
-  return results.slice(0, 50);
+  return results;
 }
 
 function extractStructuredExperience(text, targetSection = 'experience') {
@@ -387,6 +387,18 @@ function extractStructuredEducation(text) {
 
     if (isInst || (hasDate && !isDegree) || eduList.length === 0 || !currentEdu) {
       if (currentEdu && currentEdu.institution) {
+        if (!currentEdu.degree && /b\.tech|bachelor|master|b\.sc|m\.sc|phd|diploma|degree|secondary|10th|12th/i.test(currentEdu.institution) && !/university|college|institute|school|academy/i.test(currentEdu.institution)) {
+           if (isInst) {
+               currentEdu.degree = currentEdu.institution;
+               currentEdu.institution = line;
+               const dateMatch = line.match(/(?:19|20)\d{2}\s*[-|–|to]+\s*(?:20\d{2}|present|current)|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d{4}.*|\b(?:19|20)\d{2}\b/i);
+               if (dateMatch) {
+                 currentEdu.duration = dateMatch[0].trim();
+                 currentEdu.institution = line.replace(dateMatch[0], '').replace(/^[|-]+|[|-]+$/g, '').replace(/,/g, '').trim();
+               }
+               continue;
+           }
+        }
         eduList.push(currentEdu);
       }
       currentEdu = { institution: line, degree: '', duration: '', cgpa: '', board_or_university: '', specialization: '' };
@@ -414,6 +426,28 @@ function extractStructuredEducation(text) {
   if (currentEdu && currentEdu.institution) {
     eduList.push(currentEdu);
   }
+  
+  const cleanupDegree = (deg) => {
+      if (!deg) return deg;
+      if (/b\.?tech/i.test(deg)) return 'Bachelor of Technology';
+      if (/m\.?tech/i.test(deg)) return 'Master of Technology';
+      if (/senior secondary|12th|intermediate|hsc/i.test(deg)) return 'Senior Secondary';
+      if (/secondary|10th|ssc|matriculation/i.test(deg) && !/senior/i.test(deg)) return 'Secondary Education';
+      if (/b\.?sc/i.test(deg)) return 'Bachelor of Science';
+      if (/m\.?sc/i.test(deg)) return 'Master of Science';
+      if (/b\.?a\b/i.test(deg)) return 'Bachelor of Arts';
+      if (/m\.?a\b/i.test(deg)) return 'Master of Arts';
+      return deg;
+  };
+  
+  eduList.forEach(edu => {
+      if (!edu.degree && /b\.tech|bachelor|master|b\.sc|m\.sc|phd|diploma|degree|secondary|10th|12th/i.test(edu.institution) && !/university|college|institute|school|academy/i.test(edu.institution)) {
+          edu.degree = edu.institution;
+          edu.institution = 'Unknown Institution';
+      }
+      edu.degree = cleanupDegree(edu.degree);
+  });
+  
   return eduList;
 }
 
